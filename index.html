@@ -1,0 +1,1061 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <script src="d3.js"></script>
+  <style>
+      body, html{
+        margin:0;
+      }
+      line{
+        stroke-width: 4;
+        stroke: #aaa;
+      }
+    </style>
+</head>
+<body></body>
+  <script type="text/javascript">
+  var width = 500;
+  var height = 500;
+
+  var rectMargin = 10;
+  var rectStyle = {w:100, h:50, fill:'#ccc'};
+  var borderCirStyle = {r:5, color:'red'}
+
+  var directionConstant = {
+      NORTH_EAST:'north_east',//东北
+      SOUTH_EAST:'south_east',//东南
+      SOUTH_WEST:'south_west',//西南
+      NORTH_WEST:'north_west',//西北
+  }
+
+  var data = [{
+    x:40,
+    y:40
+  },{
+    x:200,
+    y:100
+  }]
+
+  var linkList = [];
+  var linkListObj = [];
+
+  function clearDrag (){
+    this.on('mousedown.drag', null);
+  }
+  function setDrag (){
+    this.call(drag);
+  }
+
+  var drag = d3.behavior.drag().on('drag', function(d){
+    d.x += d3.event.dx;
+    d.y += d3.event.dy;
+    d3.select(this).call(setposition2)
+    drewLink();
+  });
+
+  var borderDrag = d3.behavior.drag().on('dragstart', function (d) {
+    d.linkFlag = true;
+    d.box.call(clearDrag);
+  }).on('dragend', function (d) {
+    delete d.linkFlag;
+    d.box.call(setDrag);
+    var target = d3.event.sourceEvent.target;
+    if(target.nodeName == 'circle'){
+      if(target._linkData.parent != d.box){
+        linkListObj.push([d.box, target._linkData.parent, this._linkData, target._linkData]);
+        drewLink();
+      }
+    }
+  })
+
+  var svg = d3.select('body').append('svg').style('padding', 0)
+    .attr('width', width)
+    .attr('height',height);
+  var rectBox = svg.append("g");
+  var linksBox = svg.append('g').attr('class', 'linksBox');
+  var rectDataBox = rectBox.selectAll('rect').data(data).enter();
+  var rectBoxList = rectDataBox.append('g')
+  .each(function(d){
+    var dom = d3.select(this);
+    d.box = dom;
+    d.rect = dom.append('rect')
+    .attr('width', rectStyle.w)
+    .attr('height',rectStyle.h)
+    .attr('fill', rectStyle.fill)
+    .each(function (d) {
+      console.log(d)
+    })
+
+    d.top = { dom : dom.append('circle').attr('class', 'border top').call(borderDrag).attr('fill', borderCirStyle.color).attr('r', borderCirStyle.r).attr('cx', rectStyle.w/2) , type:'top' , parent:d.box};
+    d.top.dom.node()._linkData = d.top;
+    d.left = { dom : dom.append('circle').attr('class', 'border left').call(borderDrag).attr('fill', borderCirStyle.color).attr('r', borderCirStyle.r).attr('cy', rectStyle.h/2) , type:'left' , parent:d.box};
+    d.left.dom.node()._linkData = d.left;
+    d.right = { dom : dom.append('circle').attr('class', 'border right').call(borderDrag).attr('fill', borderCirStyle.color).attr('r', borderCirStyle.r).attr('cy', rectStyle.h/2).attr('cx', rectStyle.w) , type:'right' , parent:d.box};
+    d.right.dom.node()._linkData = d.right;
+    d.bottom = { dom : dom.append('circle').attr('class', 'border bottom').call(borderDrag).attr('fill', borderCirStyle.color).attr('r', borderCirStyle.r).attr('cx', rectStyle.w/2).attr('cy', rectStyle.h) , type:'bottom' , parent:d.box};
+    d.bottom.dom.node()._linkData = d.bottom;
+
+    borderHide(d);
+  })
+  .call(setposition2)
+  .call(setDrag)
+  .on('mouseover', function(d){
+    borderShow(d)
+  })
+  .on('mouseout', function(d){
+    if(!d.linkFlag) borderHide(d)
+  });
+
+  function borderHideAll() {
+    rectBoxList.selectAll('.border').style('opacity', '0');
+  }
+
+  function borderHide(d) {
+    d.box.selectAll('.border').style('opacity', '0');
+  }
+  function borderShow(d) {
+    d.box.selectAll('.border').style('opacity', '1');
+  }
+
+  function setposition (){
+    this.attr('x', function(d){ return d.x })
+        .attr('y', function(d){ return d.y })
+  }
+  function setposition2 (d) {
+    this.attr('transform', function (d){
+      return 'translate('+d.x+','+d.y+')';
+    });
+  }
+
+  function generateParameters(source, target, sourcePoint, targetPoint){
+    var r = borderCirStyle.r;
+    var startNode = sourcePoint.dom.node().getBoundingClientRect(),
+        endNode = targetPoint.dom.node().getBoundingClientRect();
+    var Sx = startNode.left + r;
+    var Sy = startNode.top + r;
+    var Sw = parseInt(source[0][0].firstChild.getAttribute("width"));//起(源)始节点宽度
+    var Sh = parseInt(source[0][0].firstChild.getAttribute("height"));//起(源)始节点高度
+    var Tx = endNode.left + r;
+    var Ty = endNode.top + r; 
+    var Tw = parseInt(target[0][0].firstChild.getAttribute("width"));//目标（终）节点宽度
+    var Th = parseInt(target[0][0].firstChild.getAttribute("height"));//目标（终）节点高度
+    var Vd = Ty-Sy ;//垂直距离
+    var Hd = Tx-Sx ;//水平距离
+    var direction = getdirection(Sx,Sy,Tx,Ty);
+    return {
+      Sx:Sx,//起(源)点横坐标
+      Sy:Sy,//起(源)点纵坐标
+      Sw:Sw,//起(源)始节点宽度
+      Sh:Sh,//起(源)始节点高度
+      Tx:Tx,//目标（终）点横坐标
+      Ty:Ty,//目标（终）点纵坐标
+      Tw:Tw,//目标（终）节点宽度
+      Th:Th,//目标（终）节点高度
+      Hd:Hd,//起点到目标点的水平距离
+      Vd:Vd,//起点到目标点的垂直距离
+      direction:direction,//起点到目标（终）点的方向
+      first:{},//起(源)点到目标（终）点 经过的第一个点
+      second:{},//起(源)点到目标（终）点 经过的第二个点
+      third:{},//起(源)点到目标（终）点 经过的第三个点
+      fourth:{},//起(源)点到目标（终）点 经过的第四个点
+      fifth:{},//起(源)点到目标（终）点 经过的第五个点
+      points:[]//起(源)点到目标（终）点 经过的所有点
+    }
+  }
+  
+  /*
+     获取起点到终点的连线中所有连接点
+     按照16连线方式来写，这样写会清晰一点，有部分算法逻辑有冗余，建议不合并，因为合并之后，逻辑更复杂，时间久了看着晕
+  */
+  function getPoints (source, target, sourceD, targetD){
+    var params = generateParameters(source, target, sourceD, targetD);
+    if(sourceD.type =="top" && targetD.type =="top") {
+      return T2T(params);
+    }
+    if(sourceD.type =="top" && targetD.type =="left") {
+      return T2L(params);
+    }
+    if(sourceD.type =="top" && targetD.type =="bottom") {
+      return T2B(params);
+    }
+    if(sourceD.type =="top" && targetD.type =="right") {
+      return T2R(params);
+    }
+    if(sourceD.type =="left" && targetD.type =="left") {
+      return L2L(params);
+    }
+    if(sourceD.type =="left" && targetD.type =="bottom") {
+      return L2B(params);
+    }
+    if(sourceD.type =="left" && targetD.type =="right") {
+      return L2R(params);
+    }
+    if(sourceD.type =="left" && targetD.type =="top") {
+      return L2T(params);
+    }
+    if(sourceD.type =="bottom" && targetD.type =="left") {
+      return B2L(params);
+    }
+    if(sourceD.type =="bottom" && targetD.type =="bottom") {
+      return B2B(params);
+    }
+    if(sourceD.type =="bottom" && targetD.type =="right") {
+      return B2R(params);
+    }
+    if(sourceD.type =="bottom" && targetD.type =="top") {
+      return B2T(params);
+    }
+    if(sourceD.type =="right" && targetD.type =="right") {
+      return R2R(params);
+    }
+    if(sourceD.type =="right" && targetD.type =="left") {
+      return R2L(params);
+    }
+    if(sourceD.type =="right" && targetD.type =="top") {
+      return R2T(params);
+    }
+    if(sourceD.type =="right" && targetD.type =="bottom") {
+      return R2B(params);
+    }
+  }
+
+  /*
+     将连线上的所有点，按顺序添加到数组中。
+  */
+  function addPoints(params){
+    var sourcePoint = {
+      x:params.Sx,
+      y:params.Sy
+    }
+    var targetPoint = {
+      x:params.Tx,
+      y:params.Ty
+    }
+    params.points.push(sourcePoint);
+    params.points.push(params.first);  
+    if(JSON.stringify(params.second) != "{}"){
+        params.points.push(params.second);
+    }
+    if(JSON.stringify(params.third) != "{}"){
+        params.points.push(params.third);
+    }
+    if(JSON.stringify(params.fourth) != "{}"){
+        params.points.push(params.fourth);
+    }
+    if(JSON.stringify(params.fifth) != "{}"){
+        params.points.push(params.fifth);
+    }
+    params.points.push(targetPoint);
+    return params.points;
+  }
+
+  /*
+     源点和目标点的方向分为东、西、南、北、西南、西北、东南、东北。 
+     为了简化方向的逻辑处理，“东”归为“东南” “南”归为“东南” “西”归为“西南” “中”归为西南 “北”归为“东北”   
+  */
+  function getdirection(Sx,Sy,Tx,Ty){
+    var Vd = Ty-Sy ;//垂直距离
+    var Hd = Tx-Sx ;//水平距离
+    if(Vd >=0 && Hd>=0){
+      return directionConstant.SOUTH_EAST
+    }
+    if(Vd >=0 && Hd<0){
+      return directionConstant.SOUTH_WEST
+    }
+    if(Vd <0 && Hd>=0){
+      return directionConstant.NORTH_EAST
+    }
+    if(Vd <0 && Hd<0){
+      return directionConstant.NORTH_WEST
+    }
+  }
+
+  //right --> bottom
+  function R2B(params) {
+    var minW= params.Sw/2 + params.Tw;  
+    if(params.direction==directionConstant.SOUTH_EAST ) {
+      var distance = params.Hd-params.Tw/2
+      if(distance>0) {
+        params.first['x'] = params.Sx+distance/2;
+      } else {
+        params.first['x'] = params.Tx+params.Tw/2+rectMargin;
+      }
+      params.first['y'] = params.Sy;
+      params.second['x'] = params.first.x
+      params.second['y']=  params.Ty+rectMargin;
+      params.third['x'] =  params.Tx;
+      params.third['y']= params.second.y;
+    }
+
+    if(params.direction==directionConstant.NORTH_EAST){
+        params.first['x'] = params.Tx;
+        params.first['y'] = params.Sy;
+    }
+    if(params.direction==directionConstant.SOUTH_WEST){
+        params.first['x'] = params.Sx+rectMargin;
+        params.first['y'] = params.Sy;
+        params.second['x'] = params.first.x;
+        if(params.Ty<params.Sy+params.Sh/2){
+         params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        } else {
+         params.second['y']=  params.Ty+rectMargin;
+        }
+        params.third['x'] = params.Tx;
+        params.third['y'] = params.second.y;
+    }
+    if(params.direction==directionConstant.NORTH_WEST){
+        params.first['x'] = params.Sx+rectMargin;
+        params.first['y'] = params.Sy;
+        params.second['x'] = params.first.x;
+        var distance = Math.abs(params.Vd)-params.Sh/2;
+        if(distance>0){
+          params.second['y']=  params.Ty+distance/2;
+        } else {
+          params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        }
+        params.third['x'] = params.Tx;
+        params.third['y'] = params.second.y;
+    }
+   
+    return addPoints(params);
+  }
+
+  //right --> top
+  function R2T(params) {
+    var minW= params.Sw/2 + params.Tw;  
+    if(params.direction==directionConstant.NORTH_EAST ) {
+      var distance = params.Hd-params.Tw/2
+      if(distance>0) {
+        params.first['x'] = params.Sx+distance/2;
+      } else {
+        params.first['x'] = params.Tx+params.Tw/2+rectMargin;
+      }
+      params.first['y'] = params.Sy;
+      params.second['x'] = params.first.x
+      params.second['y']=  params.Ty-rectMargin;
+      params.third['x'] =  params.Tx;
+      params.third['y']= params.second.y;
+    }
+
+    if(params.direction==directionConstant.SOUTH_EAST){
+        params.first['x'] = params.Tx;
+        params.first['y'] = params.Sy;
+    }
+    if(params.direction==directionConstant.SOUTH_WEST || params.direction==directionConstant.NORTH_WEST){
+        params.first['x'] = params.Sx+rectMargin;
+        params.first['y'] = params.Sy;
+        params.second['x'] = params.first.x;
+        if(params.direction==directionConstant.SOUTH_WEST){
+          var distance = params.Vd-params.Sh/2;
+          if(distance>0){
+            params.second['y']=  params.Ty-distance/2;
+          } else {
+            params.second['y']=  params.Sy-params.Sh/2-rectMargin;
+          }
+        }else{
+          if(params.Ty>params.Sy-params.Sh/2){
+            params.second['y']=  params.Sy-params.Sh/2-rectMargin;
+          } else {
+            params.second['y']=  params.Ty-rectMargin;
+          }
+        }
+        
+        params.third['x'] = params.Tx;
+        params.third['y'] = params.second.y;
+    }
+    return addPoints(params);
+  }
+  
+
+  //right --> left
+  function R2L(params) {
+    var minW= params.Sw/2 + params.Tw;
+   if(params.direction==directionConstant.NORTH_WEST || params.direction==directionConstant.SOUTH_WEST) {
+     params.first['x'] = params.Sx+rectMargin;
+     params.first['y'] = params.Sy;
+     var distance = Math.abs(params.Vd)-params.Sh/2-params.Th/2
+     params.second['x'] = params.first.x
+     if(params.direction==directionConstant.NORTH_WEST){
+        params.second['y']=  distance>0?params.Sy-params.Sh/2-distance/2:params.Sy+params.Sh/2+rectMargin;
+     }else{
+        params.second['y']=  distance>0?params.Sy+params.Sh/2+distance/2:params.Sy-params.Sh/2-rectMargin;
+     }
+     params.third['x'] = params.Tx-rectMargin;
+     params.third['y']=  params.second.y;
+     params.fourth['x'] = params.third.x;
+     params.fourth['y'] =  params.Ty;    
+   }
+   if(params.direction==directionConstant.NORTH_EAST ||params.direction==directionConstant.SOUTH_EAST) {
+     params.first['x'] = params.Sx+params.Hd/2;
+     params.first['y'] = params.Sy;
+     params.second['x'] = params.first.x
+     params.second['y']=  params.Ty;
+   }
+    return addPoints(params);
+  }
+
+  //right -->right
+  function R2R(params) {
+   var minW= params.Sw/2 + params.Tw;
+   if(params.direction==directionConstant.NORTH_WEST || params.direction==directionConstant.SOUTH_WEST) {
+      params.first['x'] = params.Sx+rectMargin;
+      params.first['y'] = params.Sy;
+      params.second['x'] = params.first.x
+      if(params.Sy+params.Sh/2+rectMargin>params.Ty && params.Ty>params.Sy-params.Sh/2-rectMargin){
+        if(params.direction==directionConstant.NORTH_EAST){
+          params.second['y']=  params.Sy-params.Sh/2-rectMargin;
+        }else{
+          params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        }
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty; 
+      }else{
+        params.second['y']=  params.Ty;
+      }   
+    }
+
+    if(params.direction==directionConstant.NORTH_EAST || params.direction==directionConstant.SOUTH_EAST) {     
+      
+      params.first['y'] = params.Sy;
+      if(params.Sy-params.Sh/2-rectMargin<params.Ty && params.Ty<params.Sy+params.Sh/2+rectMargin){
+        params.first['x'] = params.Sx+rectMargin; 
+        params.second['x'] = params.first.x      
+        if(params.direction==directionConstant.NORTH_WEST){
+          params.second['y']=  params.Ty+params.Th/2+rectMargin;
+        }else{
+            params.second['y']=  params.Ty+params.Th/2+rectMargin;    
+        }
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty; 
+      }else{
+        params.first['x'] = params.Tx+rectMargin;
+        params.second['x'] = params.first.x    
+        params.second['y']=  params.Ty;
+      }   
+    }
+    return addPoints(params);
+  }
+
+  //bottom -->top
+  function B2T(params) {    
+    if(params.direction==directionConstant.NORTH_EAST || params.direction==directionConstant.NORTH_WEST) {
+      var Hd = Math.abs(params.Hd)-params.Sw/2 - params.Tw/2;
+      params.first['x'] = params.Sx ;
+      if(Hd>0){
+        params.first['y']=  params.Sy+rectMargin;
+        if(params.direction==directionConstant.NORTH_EAST){
+          params.second['x'] = params.Sx+params.Sw/2+Hd/2;
+        }else{
+          params.second['x'] = params.Sx-params.Sw/2-Hd/2;
+        }
+      }else{
+        if(params.Sy<params.Ty+params.Th){
+          params.first['y']= params.Ty+params.Th+rectMargin;
+        }else{
+          params.first['y']=  params.Sy+rectMargin;
+        }
+        if(params.direction==directionConstant.NORTH_EAST){
+          params.second['x'] = params.Tx+params.Tw/2+rectMargin;
+        }else{
+          params.second['x'] = params.Tx-params.Tw/2-rectMargin;
+        }
+        
+      }
+      params.second['y']=  params.first.y;
+      params.third['x'] = params.second.x;
+      params.third['y']=  params.Ty-rectMargin;
+      params.fourth['x'] = params.Tx;
+      params.fourth['y']=  params.third.y;     
+    }
+    if(params.direction==directionConstant.SOUTH_WEST || params.direction==directionConstant.SOUTH_EAST) {
+      params.first['x'] = params.Sx ;
+      params.first['y']=  params.Sy+params.Vd/2;
+      params.second['x'] = params.Tx;
+      params.second['y']=  params.first.y;
+    }
+         
+    return addPoints(params);
+  }
+
+  //bottom -->right
+  function B2R(params) {
+    var minW= params.Sw/2+params.Tw/2;
+    if(params.direction==directionConstant.NORTH_EAST) {
+        params.first['x'] = params.Sx ;
+        params.first['y']=  params.Sy+rectMargin;
+        if(params.Hd>params.Sw/2){
+          params.second['x'] = params.Tx +rectMargin;
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty;
+        }else{
+          params.second['x'] = params.Sx +params.Sw/2+rectMargin;
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty;
+        }
+        params.second['y']=  params.first.y;
+        
+    }
+
+    if(params.direction==directionConstant.SOUTH_EAST) {
+        params.first['x'] = params.Sx ;
+        var distance = params.Vd-params.Th/2;
+        if(distance>0){
+          params.first['y']=  params.Sy+distance/2;
+        }else{
+          params.first['y']=  params.Ty+params.Th/2+rectMargin;
+        }
+        params.second['x'] = params.Tx +rectMargin;
+        params.second['y']=  params.first.y;
+        params.third['x'] = params.second.x;
+        params.third['y']= params.Ty;
+       
+    }
+
+    if(params.direction==directionConstant.NORTH_WEST) {
+        params.first['x'] = params.Sx;
+        params.first['y']=  params.Sy+rectMargin;
+        if(Math.abs(params.Hd)<params.Sw/2){
+          params.second['x'] = params.Sx+params.Sw/2+rectMargin;
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty;
+        }else{
+          params.second['x'] = params.Tx+rectMargin;
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty;
+        }
+        params.second['y']= params.first.y;
+    } 
+
+    if(params.direction==directionConstant.SOUTH_WEST) {
+        params.first['x'] = params.Sx;
+        params.first['y']=  params.Ty;
+    }          
+    return addPoints(params);
+  }
+
+  //bottom -->bottom
+  function B2B(params) {
+
+    if(params.direction==directionConstant.NORTH_WEST || params.direction==directionConstant.NORTH_EAST) {
+        params.first['x'] = params.Sx;
+        params.first['y']=  params.Sy+rectMargin;
+        if(Math.abs(params.Hd)<params.Sw/2){
+          if(params.direction==directionConstant.NORTH_WEST){
+            params.second['x'] = params.Sx-params.Sw/2-rectMargin;
+          }else{
+            params.second['x'] = params.Sx+params.Sw/2+rectMargin;
+          }
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty+rectMargin;
+          params.fourth['x'] = params.Tx;
+          params.fourth['y'] = params.third.y;
+        }else{
+          params.second['x'] = params.Tx;
+        }
+        params.second['y']= params.first.y;
+    }    
+
+    if(params.direction==directionConstant.SOUTH_EAST || params.direction==directionConstant.SOUTH_WEST) {
+        params.first['x'] = params.Sx;    
+        if(params.Hd<params.Sw/2){
+          params.first['y']=  params.Sy+rectMargin;
+          if(params.direction==directionConstant.SOUTH_EAST){
+            params.second['x'] = params.Tx-params.Sw/2-rectMargin;
+          }else{
+            params.second['x'] = params.Tx+params.Sw/2+rectMargin;
+          }
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty+rectMargin;
+          params.fourth['x'] = params.Tx;
+          params.fourth['y'] = params.third.y;
+        }else{
+          params.first['y']=  params.Ty+rectMargin;
+          params.second['x'] = params.Tx;
+        }
+        params.second['y']= params.first.y;
+    }
+
+          
+    return addPoints(params);
+  }
+
+  
+
+  //bottom -->left
+  function B2L(params) {
+    
+   if(params.direction==directionConstant.NORTH_EAST) {
+        params.first['x'] = params.Sx ;
+        params.first['y']=  params.Sy+rectMargin
+        params.second['y'] = params.first.y;
+         var Hd = params.Tx-params.Sx-params.Sw/2
+        if(Hd>0){
+          params.second['x']= params.Sx+params.Sw/2+Hd/2;
+        }else{
+          params.second['x']= params.Sx-params.Sw/2-rectMargin;
+        }
+        params.third['x'] = params.second.x;
+        params.third['y'] = params.Ty;
+    }
+
+    if(params.direction==directionConstant.SOUTH_EAST) {
+        params.first['x'] = params.Sx;
+        params.first['y']=  params.Ty;
+    }
+    if(params.direction==directionConstant.SOUTH_WEST || params.direction==directionConstant.NORTH_WEST) {
+      params.first['x'] = params.Sx;
+      var Vd = Math.abs(params.Ty-params.Sy)-params.Th/2
+      if(Vd>0){
+        if(params.direction==directionConstant.SOUTH_WEST){
+          params.first['y']=  params.Sy+Vd/2; 
+        }else{
+          params.first['y']=  params.Sy+rectMargin;
+        }
+      }else{
+        params.first['y']=  params.Ty+params.Th/2+rectMargin;
+      }
+      params.second['x'] = params.Tx-rectMargin;
+      params.second['y']= params.first.y;
+      params.third['x'] = params.second.x;
+      params.third['y'] = params.Ty;
+    }          
+    return addPoints(params);
+  }
+
+  //left -->top
+  function L2T(params) {
+   if(params.direction==directionConstant.NORTH_EAST) {
+        params.first['x'] = params.Sx-rectMargin ;
+        params.first['y']=  params.Sy
+        params.second['x'] = params.first.x;
+        if(params.Sy-params.Ty-params.Sh/2>0){
+          params.second['y']= params.Ty-rectMargin;
+        }else{
+          params.second['y']= params.Sy-params.Sh/2-rectMargin;
+        }
+        params.third['x'] = params.Tx;
+        params.third['y'] = params.second.y;
+    }
+
+    if(params.direction==directionConstant.SOUTH_EAST) {
+        var Vd = params.Ty-params.Sy-params.Sh/2;
+        params.first['x'] = params.Sx-rectMargin ;
+        params.first['y']=  params.Sy
+        params.second['x'] = params.first.x;
+        if(Vd>0){
+          params.second['y']= params.Sy+params.Sh/2+Vd/2;
+        }else{
+           params.second['y']= params.Sy-params.Sh/2-rectMargin;
+        }
+        params.third['x'] = params.Tx;
+        params.third['y'] = params.second.y;
+    }
+
+    if(params.direction==directionConstant.NORTH_WEST) {
+      var Hd = params.Sx - params.Tx-params.Sw/2 ;//水平距离
+      if(params.Hd<rectMargin){
+        if(Hd<0){
+          params.first['x'] = params.Tx-params.Th/2-rectMargin ;
+        }else{
+          params.first['x'] = params.Sx-Hd/2 ;
+        }   
+      } else{
+        params.first['x'] = params.Sx-rectMargin ;
+      }
+      params.first['y']=  params.Sy
+      params.second['x'] = params.first.x;
+      params.second['y']= params.Ty-rectMargin;
+      params.third['x'] = params.Tx;
+      params.third['y'] = params.second.y;
+    } 
+
+    if(params.direction==directionConstant.SOUTH_WEST) {
+      params.first['x'] = params.Tx ;
+      params.first['y']=  params.Sy;
+    }          
+    return addPoints(params);
+  }
+
+  //left -->right
+  function L2R(params) {
+   if(params.direction==directionConstant.NORTH_EAST) {
+     params.first['x'] = params.Sx-rectMargin;
+     params.first['y'] = params.Sy;
+     var distance = Math.abs(params.Vd)-params.Sh/2-params.Th/2
+     if(distance>0){
+        params.second['x'] = params.first.x
+        params.second['y']=  params.Sy-params.Sh/2-distance/2;
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty;    
+     }else{
+        params.second['x'] = params.first.x
+        params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty;     
+     }
+   }
+  if(params.direction==directionConstant.SOUTH_EAST) {
+     params.first['x'] = params.Sx-rectMargin;
+     params.first['y'] = params.Sy;
+     var distance = Math.abs(params.Vd)-params.Sh/2-params.Th/2
+     if(distance>0){
+        params.second['x'] = params.first.x
+        params.second['y']=  params.Sy+params.Sh/2+distance/2;
+        
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;   
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty;   
+     }else{
+        params.second['x'] = params.first.x
+        params.second['y']=  params.Sy-params.Sh/2-rectMargin;
+        params.third['x'] = params.Tx+rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty;     
+     }
+   }
+   if(params.direction==directionConstant.NORTH_WEST ||params.direction==directionConstant.SOUTH_WEST) {
+     params.first['x'] = params.Sx+params.Hd/2;
+     params.first['y'] = params.Sy;
+     params.second['x'] = params.first.x
+     params.second['y']=  params.Ty;
+   }
+    return addPoints(params);
+  }
+
+  //left -->bottom
+  function L2B(params) {  
+    if(params.Hd>0) {
+        params.first['x'] = params.Sx-rectMargin;
+        params.first['y'] = params.Sy;
+        params.second['x'] = params.first.x
+        if((params.Vd-params.Sh/2)>0){
+            params.second['y']=  params.Ty+rectMargin;
+        }else if((Math.abs(params.Vd)-params.Sh/2)>0){
+            params.second['y']=  params.Sy-params.Sh/2-(Math.abs(params.Vd)-params.Sh/2)/2;
+        }else{
+            params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        } 
+        params.third['x'] = params.Tx;
+        params.third['y']=  params.second.y;       
+    }else{
+        params.first['y'] = params.Sy; 
+        if(Math.abs(params.Hd)<params.Tw/2){
+            if(params.Vd>0){
+                params.first['x'] = params.Tx-params.Tw/2-rectMargin;
+                params.second['x'] = params.first.x
+                params.second['y']=  params.Ty+rectMargin;
+                params.third['x'] = params.Tx;
+                params.third['y']=  params.second.y;  
+            }else{
+                params.first['x'] = params.Tx;
+            }
+            
+        }else{
+          if( params.Vd<0 && Math.abs(params.Vd)>rectMargin){
+            params.first['x'] = params.Tx;
+          }else{
+            params.first['x'] = params.Sx-rectMargin;
+            params.second['x'] = params.first.x
+            params.second['y']=  params.Ty+rectMargin;
+            params.third['x'] = params.Tx;
+            params.third['y']=  params.second.y;   
+          }
+        }
+    }
+    return addPoints(params);
+  }
+
+
+  //left -->left
+  function L2L(params) {   
+   if(params.direction==directionConstant.NORTH_EAST || params.direction==directionConstant.SOUTH_EAST) {
+      params.first['x'] = params.Sx-rectMargin;
+      params.first['y'] = params.Sy;
+      params.second['x'] = params.first.x
+      if(params.Sy+params.Sh/2+rectMargin>params.Ty && params.Ty>params.Sy-params.Sh/2-rectMargin){
+        if(params.direction==directionConstant.NORTH_EAST){
+          params.second['y']=  params.Sy-params.Sh/2-rectMargin;
+        }else{
+          params.second['y']=  params.Sy+params.Sh/2+rectMargin;
+        }
+        params.third['x'] = params.Tx-rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty; 
+      }else{
+        params.second['y']=  params.Ty;
+      }   
+    }
+
+    if(params.direction==directionConstant.NORTH_WEST || params.direction==directionConstant.SOUTH_WEST) {     
+      
+      params.first['y'] = params.Sy;
+      if(params.Sy-params.Sh/2-rectMargin<params.Ty && params.Ty<params.Sy+params.Sh/2+rectMargin){
+        params.first['x'] = params.Sx-rectMargin; 
+        params.second['x'] = params.first.x      
+        if(params.direction==directionConstant.NORTH_WEST){
+          params.second['y']=  params.Ty+params.Th/2+rectMargin;
+        }else{
+            params.second['y']=  params.Ty+params.Th/2+rectMargin;    
+        }
+        params.third['x'] = params.Tx-rectMargin;
+        params.third['y']=  params.second.y;
+        params.fourth['x'] = params.third.x;
+        params.fourth['y'] =  params.Ty; 
+      }else{
+        params.first['x'] = params.Tx-rectMargin;
+        params.second['x'] = params.first.x    
+        params.second['y']=  params.Ty;
+      }   
+    }
+    return addPoints(params);
+  }
+
+  //top -->right
+  function T2R(params) {    
+    var Vd = Math.abs(params.Ty - params.Sy)-params.Th/2;
+   
+   if(params.direction==directionConstant.NORTH_EAST || params.direction==directionConstant.SOUTH_EAST ) {
+      var Hd = Math.abs(params.Tx - params.Sx); 
+      params.first['x'] = params.Sx
+      if(params.direction==directionConstant.NORTH_EAST ){
+         params.first['y']=  Vd>0? params.Sy-Vd/2:params.Ty-rectMargin-params.Th/2 ; 
+      }else{
+         params.first['y']=  Vd>rectMargin? params.Sy-rectMargin:params.Ty-rectMargin-params.Th/2 ; 
+      }
+      if(Hd>params.Sw/2){
+        params.second['x'] = params.Tx+rectMargin;
+      }else{
+         params.second['x'] = params.Sx+params.Sw/2+rectMargin;
+      }
+      
+      params.second['y']=  params.first.y;
+      params.third['x'] = params.second.x ;
+      params.third['y']=  params.Ty;        
+    }
+
+    if(params.direction==directionConstant.NORTH_WEST){
+        params.first['x'] = params.Sx;
+        params.first['y'] = params.Ty;
+    }
+
+    if(params.direction==directionConstant.SOUTH_WEST ) { 
+      var Hd = params.Sx-params.Tx-params.Sw/2; 
+      params.first['x'] = params.Sx;
+      params.first['y'] = params.Sy-rectMargin;
+      params.second['x'] = Hd<0?params.Sx+params.Sw/2+rectMargin:params.Sx-params.Sw/2-Hd/2;
+      params.second['y']=  params.first.y;
+      params.third['x'] = params.second.x;
+      params.third['y']=  params.Ty;
+    }
+    return addPoints(params);
+  }
+  
+  //top -->bottom
+  function T2B(params) {
+   if(params.direction==directionConstant.SOUTH_EAST || params.direction==directionConstant.SOUTH_WEST) {
+      var Hd = Math.abs(params.Hd)-params.Sw/2 - params.Tw/2;
+      params.first['x'] = params.Sx ;
+      if(Hd>0){
+        params.first['y']=  params.Sy-rectMargin;
+        if(params.direction==directionConstant.SOUTH_EAST){
+          params.second['x'] = params.Sx+params.Sw/2+Hd/2;
+        }else{
+          params.second['x'] = params.Sx-params.Sw/2-Hd/2;
+        }
+      }else{
+        if(params.Sy<params.Ty+params.Th){
+          params.first['y']=  params.Sy-rectMargin;
+        }else{
+          params.first['y']= params.Ty+params.Th+rectMargin;
+        }
+        if(params.direction==directionConstant.SOUTH_EAST){
+          params.second['x'] = params.Tx+params.Tw/2+rectMargin;
+        }else{
+          params.second['x'] = params.Tx-params.Tw/2-rectMargin;
+        }
+        
+      }
+      params.second['y']=  params.first.y;
+      params.third['x'] = params.second.x;
+      params.third['y']=  params.Ty+rectMargin;
+      params.fourth['x'] = params.Tx;
+      params.fourth['y']=  params.third.y;     
+    }
+    if(params.direction==directionConstant.NORTH_WEST || params.direction==directionConstant.NORTH_EAST) {
+      params.first['x'] = params.Sx ;
+      params.first['y']=  params.Sy+params.Vd/2;
+      params.second['x'] = params.Tx;
+      params.second['y']=  params.first.y;
+    }
+         
+    return addPoints(params);
+  }
+
+  //top -->left
+  function T2L(params) {
+    var minW= params.Sw/2+5;
+    params.first['x'] = params.Sx ;
+    params.first['y'] =  params.Sy-rectMargin;
+    var Hd = Math.abs(params.Hd)-params.Sw/2;
+    var Vd = Math.abs(params.Vd)-params.Th/2;
+    if(params.direction==directionConstant.SOUTH_EAST ){
+      if(Hd<rectMargin){
+         params.second['x'] = params.first.x - minW+Hd;;
+         params.second['y']=  params.first.y;
+         params.third['x'] =  params.second.x;
+         params.third['y']=   params.Ty;
+      }else{
+         params.second['x'] = params.Tx-Hd/2;
+         params.second['y']=  params.first.y;
+         params.third['x'] = params.second.x ;
+         params.third['y']=  params.Ty;
+      }
+    }
+
+   if(params.direction==directionConstant.NORTH_EAST) {   
+         params.second['x'] = params.first.x ;
+         params.second['y']=  params.Ty;
+    }
+
+    if(params.direction==directionConstant.SOUTH_WEST) {
+      if(Hd<rectMargin){
+         params.second['x'] = params.first.x - rectMargin-params.Sw/2;;
+         params.second['y']=  params.first.y;
+         params.third['x'] = params.second.x ;
+         params.third['y']=  params.Ty;
+      }else{         
+         if(Vd>rectMargin){
+            params.second['x'] = params.Tx - rectMargin;
+            params.second['y']=  params.first.y;
+            params.third['x'] = params.second.x ;
+            params.third['y']=  params.Ty;
+         } else {
+            params.second['x'] = params.first.x;
+            params.second['y']=  params.Ty-rectMargin-params.Th/2;
+            params.third['x'] = params.Tx-rectMargin ;
+            params.third['y']=  params.second.y;
+            params.fourth['x'] = params.third.x;
+            params.fourth['y'] =  params.Ty;
+         }
+         
+         
+      }
+    }
+    if(params.direction==directionConstant.NORTH_WEST) {
+      if(Vd<rectMargin){
+         params.second['x'] = params.first.x;
+         params.second['y']=  params.Ty-rectMargin-params.Th/2;
+         params.third['x'] =  params.Tx - rectMargin;
+         params.third['y']=   params.second.y;
+         params.fourth['x'] =  params.Tx - rectMargin;
+         params.fourth['y'] =   params.Ty;
+      }else{
+         params.second['x'] = params.Tx - rectMargin;;
+         params.second['y']=  params.first.y;
+         params.third['x'] = params.second.x ;
+         params.third['y']=  params.Ty;
+      }
+    }      
+    return addPoints(params);
+  }
+   
+
+   //top -->top
+  function T2T(params) {
+
+    if(params.direction==directionConstant.SOUTH_WEST || params.direction==directionConstant.SOUTH_EAST) {
+        params.first['x'] = params.Sx;
+        params.first['y']=  params.Sy-rectMargin;
+        if(Math.abs(params.Hd)<params.Sw/2){
+          if(params.direction==directionConstant.SOUTH_WEST){
+            params.second['x'] = params.Sx-params.Sw/2-rectMargin;
+          }else{
+            params.second['x'] = params.Sx+params.Sw/2+rectMargin;
+          }
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty-rectMargin;
+          params.fourth['x'] = params.Tx;
+          params.fourth['y'] = params.third.y;
+        }else{
+          params.second['x'] = params.Tx;
+        }
+        params.second['y']= params.first.y;
+    }    
+
+    if(params.direction==directionConstant.NORTH_EAST || params.direction==directionConstant.NORTH_WEST) {
+        params.first['x'] = params.Sx;    
+        if(Math.abs(params.Hd)<params.Sw/2){
+          params.first['y']=  params.Sy-rectMargin;
+          if(params.direction==directionConstant.NORTH_EAST){
+            params.second['x'] = params.Tx-params.Sw/2-rectMargin;
+          }else{
+            params.second['x'] = params.Tx+params.Sw/2+rectMargin;
+          }
+          params.third['x'] = params.second.x;
+          params.third['y']= params.Ty-rectMargin;
+          params.fourth['x'] = params.Tx;
+          params.fourth['y'] = params.third.y;
+        }else{
+          params.first['y']=  params.Ty-rectMargin;
+          params.second['x'] = params.Tx;
+        }
+        params.second['y']= params.first.y;
+    }     
+    return addPoints(params);
+  }
+  
+
+  function drewLink() {
+    if(!linkListObj.length) return;
+    linkList = [];
+    for(var i in linkListObj) linkList.push(getPoints.apply(this, linkListObj[i]));
+    var links = linkList;
+
+    linksBox.selectAll('.linkBox').remove();
+    var linksData = linksBox.selectAll('.linkBox').data(links);
+
+    var linkBoxList = linksData.enter()
+      .append('g')
+      .attr('class', 'linkBox');
+
+    var _linkList = linkBoxList.selectAll('line').data(function (d) {
+      var data = [];
+      for(var i = 0; i<d.length-1; i++){
+        data.push({source:d[i], target:d[i+1]});
+      }
+      return data;
+    })
+    .enter()
+    .append('line')
+    .call(setLinkXY);
+  }
+
+  function setLinkXY(d) {
+    d.attr('x1', function (d) {
+      return d.source.x
+    })
+    .attr('x2', function (d) {
+      return d.target.x
+    })
+    .attr('y1', function (d) {
+      return d.source.y
+    })
+    .attr('y2', function (d) {
+      return d.target.y
+    })
+  }
+  </script></html>
